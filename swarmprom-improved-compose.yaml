@@ -1,0 +1,232 @@
+version: "3.8"
+
+networks:
+  net:
+    driver: overlay
+    attachable: true
+
+configs:
+  caddy_config:
+    file: ./caddy/Caddyfile
+  dockerd_config:
+    file: ./dockerd-exporter/Caddyfile
+  node_rules:
+    file: ./prometheus/rules/swarm_node.rules.yml
+  task_rules:
+    file: ./prometheus/rules/swarm_task.rules.yml
+  prometheus_config:
+    file: ./prometheus/prometheus.yaml
+  alertmanager_config:
+    file: ./alertmanager/alertmanager.yml
+  grafana_dashboard_nodes:
+    file: ./grafana/dashboards/swarmprom-nodes-dash.json
+  grafana_dashboard_prometheus:
+    file: ./grafana/dashboards/swarmprom-prometheus-dash.json
+  grafana_dashboard_services:
+    file: ./grafana/dashboards/swarmprom-services-dash.json
+
+services:
+  dockerd-exporter:
+    image: caddy:2.7.3
+    networks:
+      - net
+    environment:
+      - DOCKER_GWBRIDGE_IP='172.18.0.1'
+    configs:
+      - source: dockerd_config
+        target: /etc/caddy/Caddyfile
+    deploy:
+      mode: global
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.47.2
+    networks:
+      - net
+    command: -logtostderr -docker_only
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /:/rootfs:ro
+      - /var/run:/var/run
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    deploy:
+      mode: global
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
+  grafana:
+    image: grafana/grafana:10.0.3
+    networks:
+      - net
+    user: 1000:1000
+    configs:
+      - source: grafana_dashboard_nodes
+        target: /etc/grafana/dashboards/swarmprom-nodes-dash.json
+      - source: grafana_dashboard_prometheus
+        target: /etc/grafana/dashboards/swarmprom-prometheus-dash.json
+      - source: grafana_dashboard_services
+        target: /etc/grafana/dashboards/swarmprom-services-dash.json
+    environment:
+      - GF_SECURITY_ADMIN_USER=${ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      #- GF_SERVER_ROOT_URL=${GF_SERVER_ROOT_URL:-localhost}
+      #- GF_SMTP_ENABLED=${GF_SMTP_ENABLED:-false}
+      #- GF_SMTP_FROM_ADDRESS=${GF_SMTP_FROM_ADDRESS:-grafana@test.com}
+      #- GF_SMTP_FROM_NAME=${GF_SMTP_FROM_NAME:-Grafana}
+      #- GF_SMTP_HOST=${GF_SMTP_HOST:-smtp:25}
+      #- GF_SMTP_USER=${GF_SMTP_USER}
+      #- GF_SMTP_PASSWORD=${GF_SMTP_PASSWORD}
+    volumes:
+      ### It could be a smart idea to mount a NSF or some other
+      ### type of disk that is accessible from all the nodes.
+      # - /mnt/nsf/swarmprom/grafana/data/:/var/lib/grafana/:rw
+      ### Init with your favorite grafana dashboards
+      # - /mnt/nsf/swarmprom/grafana/dashboards/:/etc/grafana/dashboards/:ro
+    deploy:
+      mode: replicated
+      replicas: 1
+      # placement:
+      #   constraints:
+      #     - node.role == manager
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
+  node-exporter:
+    image: prom/node-exporter:v1.6.1
+    networks:
+      - net
+    environment:
+      - NODE_ID={{.Node.ID}}
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+      - /etc/hostname:/etc/nodename
+    command:
+      - '--path.sysfs=/host/sys'
+      - '--path.procfs=/host/proc'
+      - '--collector.textfile.directory=/etc/node-exporter/'
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)'
+      - '--no-collector.ipvs'
+    deploy:
+      mode: global
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    networks:
+      - net
+    user: 1000:1000
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      ### Mount to a NSF drive or similar so that Prometheus can run on different nodes and have persistant storage
+      #- '--storage.tsdb.path=${PROMETHEUS_STORAGE_PATH}'
+      - '--storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-24h}'
+    volumes:
+      # - prometheus:/prometheus
+      # - ${PROMETHEUS_STORAGE_PATH}:${PROMETHEUS_STORAGE_PATH}:rw
+    configs:
+      - source: node_rules
+        target: /etc/prometheus/swarm_node.rules.yml
+      - source: task_rules
+        target: /etc/prometheus/swarm_task.rules.yml
+      - source: prometheus_config
+        target: /etc/prometheus/prometheus.yml
+    deploy:
+      mode: replicated
+      replicas: 1
+      # placement:
+      #   constraints:
+      #     - node.role == manager
+      resources:
+        limits:
+          memory: 2048M
+        reservations:
+          memory: 128M
+
+  caddy:
+    image: caddy:2.7.3
+    ports:
+      - "3000:3000"
+      - "9090:9090"
+      - "9093:9093"
+      - "9094:9094"
+    networks:
+      - net
+    environment:
+      - ADMIN_USER=${ADMIN_USER:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    deploy:
+      mode: replicated
+      replicas: 1
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 5s
+      timeout: 1s
+      retries: 5
+
+  alertmanager:
+    image: prom/alertmanager:v0.25.0
+    networks:
+      - net
+    environment:
+      - SLACK_URL=${SLACK_URL:-https://hooks.slack.com/services/TOKEN}
+      - SLACK_CHANNEL=${SLACK_CHANNEL:-general}
+      - SLACK_USER=${SLACK_USER:-alertmanager}
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      # - '--storage.path=/alertmanager'
+    configs:
+      - source: alertmanager_config
+        target: /etc/alertmanager/alertmanager.yml
+    deploy:
+      mode: replicated
+      replicas: 1
+      # placement:
+      #   constraints:
+      #     - node.role == manager
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
+  karma:
+    image: lmierzwa/karma:v0.115
+    networks:
+      - net
+    environment:
+      - "ALERTMANAGER_URIS=default:http://alertmanager:9093"
+    deploy:
+      mode: replicated
+      replicas: 1
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
