@@ -1,8 +1,17 @@
 # SWarmprom-IMproved aka SWIM
 
+Swarmprom is a starter kit for Docker Swarm monitoring.
+
 SWarmprom-IMproved, also known as SWIM, is an updated version of the original [Swarmprom project](https://github.com/stefanprodan/swarmprom).
 
 SWIM uses the up to date versions (as of September 2023) of Prometheus, Grafana, cAdvisor, Node Exporter, Alert Manager and ~~Unsee~~ Karma. This is the same original stack that is used in Swarmprom. Unsee is replaced by Karma, which is a fork of Unsee by the original developer.
+
+## Why use SWIM?
+
+- You want an easy to setup and use **monitoring tool for your Docker Swarm**.
+  - Need something that works on ARM64 as well as on AMD64/x64
+- You already use Swarmprom, but want to use up to date versions of Prometheus, Grafana, etc.
+  - Or you want to use some specific versions of the software. SWIM allows you to pick the version you want to use.
 
 ## About SWIM
 
