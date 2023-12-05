@@ -1,9 +1,10 @@
 # SWIM - SWarmprom IMproved
 
-The original [Swarmprom](https://github.com/stefanprodan/swarmprom) is excellent, but it has become quite outdated and it is not being updated.
-When writing this post, it has been over 3 years since there was an update to the repository.
+The original [Swarmprom](https://github.com/stefanprodan/swarmprom) is excellent, but it is no longer maintained and has become outdated.
+As of writing this post, it has been over 3 years since there was an update to the repository and it has now been archived.
 
-Here is a up to date version of Swarmprom, that I call Swarmprom Improved aka SWIM, to make it compatible with the latest versions (as of September 2023) of Prometheus, Grafana, cAdvisor, Node Exporter, Alert Manager and ~~Unsee~~ Karma, the same programs, or stack, used by the original Swarmprom. Karma is a fork of Unsee by the original developer.
+Here is a up to date version of Swarmprom, that I call Swarmprom Improved aka SWIM.
+The main idea is to make it compatible with the latest versions (as of September 2023) of Prometheus, Grafana, cAdvisor, Node Exporter, Alert Manager and ~~Unsee~~ Karma, the same programs, or stack, used by the original Swarmprom. Karma is a fork of Unsee by the original developer.
 
 Here is the up to date [swarmprom-improved-compose.yaml](swarmprom-improved-compose.yaml) file.
 
@@ -11,7 +12,7 @@ Deploy it using this command: `docker swarm deploy -c <path/to/swarmprom-improve
 
 ## Deploy
 
-Deploy without AlertManager:
+Default Deploy (without AlertManager and Karma):
 
 ```bash
 git clone https://github.com/persunde/swarmprom-improved.git
@@ -19,7 +20,11 @@ cd swarmprom-improved
 docker stack deploy -c swarmprom-improved-compose.yaml swim
 ```
 
-If you want to include AlertManager, then deploy like this:
+If you want to include AlertManager and Karma, then:
+
+1. Modify the [swarmprom-improved-compose.yaml](swarmprom-improved-compose.yaml) file, and set the `replicas` to 1 for both AlertManager and Karma.
+2. Get a slack token/hook-URL.
+3. Deploy using the below command:
 
 ```bash
 $ git clone https://github.com/persunde/swarmprom-improved.git
@@ -71,14 +76,16 @@ These are the main changes from the original Swarmprom that are in SWarmprom IMp
   - Tested on on AWS Graviton instances.
   - All the images have ARM64/ARMv8 and AMD64 releases
 - Added the amazing Grafana dashboard [Node Exporter Full (1860)](https://grafana.com/grafana/dashboards/1860-node-exporter-full/) (REMOVE?)
-- Updated Grafana dashboards (REMOVE?)
+- Updated and modified previous Grafana dashboards
 - <TODO>:: add a list of Grafana dashboards the user should add, either just add as a list or somehow embedded it into the yaml file or something
 
 ## Persistence storage
 
 The `swarmprom-improved-compose.yaml` deployment will not keep the data between container restarts. To do that you need to handle it yourself.
 
-Assuming you run a multi-machine setup, the Grafana configuration and the Prometheus data needs to be saved in a persistent storage that is independent of the container, so that the data will be not be lost even when the machine or container restarts. You probably also want to save the Grafana configuration and dashboards.
+See the comments in the [swarmprom-improved-compose.yaml](swarmprom-improved-compose.yaml) file for how to add data persistence to Prometheus and Grafana.
+
+Assuming you run a multi-machine setup, the Grafana configuration and the Prometheus data needs to be saved in a persistent storage that is independent of the container, so that the data will be not be lost even when the machine or container restarts. You probably also want to save the Grafana configuration and dashboards between deployments or container restarts.
 
 Here are some suggestions on how to achieve persistent storage for Prometheus and Grafana:
 
