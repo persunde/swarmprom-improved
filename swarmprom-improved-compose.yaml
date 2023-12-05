@@ -10,6 +10,8 @@ configs:
     file: ./caddy/Caddyfile
   dockerd_config:
     file: ./dockerd-exporter/Caddyfile
+  node_exporter_entrypoint_script:
+    file: ./node-exporter/docker-entrypoint.sh
   node_rules:
     file: ./prometheus/rules/swarm_node.rules.yml
   task_rules:
@@ -18,6 +20,8 @@ configs:
     file: ./prometheus/prometheus.yaml
   alertmanager_config:
     file: ./alertmanager/alertmanager.yml
+  grafana_data_sources_prometheus:
+    file: ./grafana/prometheus.yaml
   grafana_dashboard_nodes:
     file: ./grafana/dashboards/swarmprom-nodes-dash.json
   grafana_dashboard_prometheus:
@@ -30,8 +34,10 @@ services:
     image: caddy:2.7.3
     networks:
       - net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
-      - DOCKER_GWBRIDGE_IP='172.18.0.1'
+      - DOCKER_GWBRIDGE_IP=172.18.0.1
     configs:
       - source: dockerd_config
         target: /etc/caddy/Caddyfile
@@ -68,6 +74,8 @@ services:
       - net
     user: 1000:1000
     configs:
+      - source: grafana_data_sources_prometheus
+        target: /etc/grafana/provisioning/datasources/prometheus.yaml
       - source: grafana_dashboard_nodes
         target: /etc/grafana/dashboards/swarmprom-nodes-dash.json
       - source: grafana_dashboard_prometheus
@@ -86,10 +94,17 @@ services:
       #- GF_SMTP_USER=${GF_SMTP_USER}
       #- GF_SMTP_PASSWORD=${GF_SMTP_PASSWORD}
     volumes:
-      ### It could be a smart idea to mount a NSF or some other
-      ### type of disk that is accessible from all the nodes.
+      ############################################################
+      # Mount to a NSF drive or similar so that Grafana settings
+      # can saved in a persistant storage in case
+      # the Grafana instance is re-started or changes nodes.
+      ############################################################
       # - /mnt/nsf/swarmprom/grafana/data/:/var/lib/grafana/:rw
-      ### Init with your favorite grafana dashboards
+
+      ########################################################################
+      # Init with your favorite grafana dashboards.
+      # Grafana will load the default dashboards from /etc/grafana/dashboards/
+      ########################################################################
       # - /mnt/nsf/swarmprom/grafana/dashboards/:/etc/grafana/dashboards/:ro
     deploy:
       mode: replicated
@@ -107,8 +122,17 @@ services:
     image: prom/node-exporter:v1.6.1
     networks:
       - net
+    ####################################################
+    # Custom entrypoint to export the metric "note_meta"
+    # that includes the hostname and more.
+    ####################################################
+    entrypoint: /etc/node-exporter/docker-entrypoint.sh
     environment:
       - NODE_ID={{.Node.ID}}
+    configs:
+      - source: node_exporter_entrypoint_script
+        target: /etc/node-exporter/docker-entrypoint.sh
+        mode: 0555 # read & execute access to all users
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
@@ -117,8 +141,13 @@ services:
     command:
       - '--path.sysfs=/host/sys'
       - '--path.procfs=/host/proc'
-      - '--collector.textfile.directory=/etc/node-exporter/'
-      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)'
+      ########################################################################
+      # The "docker-entrypoint.sh" script creates a file with 
+      # the custom metric "note_meta" to the "/tmp/node-exporter/" directory.
+      # See: https://github.com/prometheus/node_exporter#textfile-collector
+      ########################################################################
+      - '--collector.textfile.directory=/tmp/node-exporter/'
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc|tmp)($$|/)'
       - '--no-collector.ipvs'
     deploy:
       mode: global
@@ -136,12 +165,19 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-      ### Mount to a NSF drive or similar so that Prometheus can run on different nodes and have persistant storage
+      ############################################################
+      # Mount to a NSF drive or similar so that Prometheus
+      # can run on different nodes and/or have persistant storage.
+      ############################################################
       #- '--storage.tsdb.path=${PROMETHEUS_STORAGE_PATH}'
       - '--storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-24h}'
     volumes:
-      # - prometheus:/prometheus
-      # - ${PROMETHEUS_STORAGE_PATH}:${PROMETHEUS_STORAGE_PATH}:rw
+      ############################################################
+      # Set the storage path so that Prometheus
+      # can run on different nodes and/or have persistant storage.
+      ############################################################
+      # - prometheus:/prometheus # Use this with "${PROMETHEUS_STORAGE_PATH}" if you always run Prometheus on the same Node.
+      # - ${PROMETHEUS_STORAGE_PATH}:${PROMETHEUS_STORAGE_PATH}:rw # Use this to specify where to save the Prometheus data.
     configs:
       - source: node_rules
         target: /etc/prometheus/swarm_node.rules.yml
@@ -185,11 +221,15 @@ services:
         reservations:
           memory: 64M
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
       interval: 5s
       timeout: 1s
       retries: 5
 
+  ###################################################
+  # Disabled by default. Set "replicas: 1" to enable.
+  # Make sure to add the slack hook URL.
+  ###################################################
   alertmanager:
     image: prom/alertmanager:v0.25.0
     networks:
@@ -206,7 +246,7 @@ services:
         target: /etc/alertmanager/alertmanager.yml
     deploy:
       mode: replicated
-      replicas: 1
+      replicas: 0
       # placement:
       #   constraints:
       #     - node.role == manager
@@ -216,6 +256,9 @@ services:
         reservations:
           memory: 64M
 
+  ###################################################
+  # Disabled by default. Set "replicas: 1" to enable.
+  ###################################################
   karma:
     image: lmierzwa/karma:v0.115
     networks:
@@ -224,7 +267,7 @@ services:
       - "ALERTMANAGER_URIS=default:http://alertmanager:9093"
     deploy:
       mode: replicated
-      replicas: 1
+      replicas: 0
       resources:
         limits:
           memory: 128M
