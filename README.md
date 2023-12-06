@@ -1,10 +1,10 @@
 # SWarmprom-IMproved aka SWIM
 
-Swarmprom is a starter kit for Docker Swarm monitoring.
+Swarmprom is a starter kit for Docker Swarm monitoring. It is meant to be easy to use, deploy, modify and extend.
 
 SWarmprom-IMproved, also known as SWIM, is an updated version of the original [Swarmprom project](https://github.com/stefanprodan/swarmprom).
 
-SWIM uses the up to date versions (as of September 2023) of Prometheus, Grafana, cAdvisor, Node Exporter, Alert Manager and ~~Unsee~~ Karma. This is the same original stack that is used in Swarmprom. Unsee is replaced by Karma, which is a fork of Unsee by the original developer.
+SWIM uses the up to date versions (as of September 2023) of Prometheus, Grafana, cAdvisor, Node Exporter, Alert Manager and ~~Unsee~~ Karma. This is the same software stack that is used in the original Swarmprom, but with updated versions of the software. Unsee is replaced by Karma, which is a fork of Unsee by the original developer.
 
 ## Why use SWIM?
 
@@ -15,29 +15,27 @@ SWIM uses the up to date versions (as of September 2023) of Prometheus, Grafana,
 
 ## About SWIM
 
-The aim for SWIM is to be as easy to deploy and use as the original Swarmprom, but use up to date versions of the software used, be easier to maintain, configure and extend for different situations.
+The aim for SWIM is to be as easy to deploy and use as the original Swarmprom, but SWIM has up to date versions of the software, easier to maintain, configure and extend. It should be easy to upgrade or downgrade the software versions in case the user needs to use a specific version. For example if the user wants to use the latest versions of Grafana, but an older version of Prometheus.
 
-SWIM uses the official distributed container images. This makes upgrading or downgrading to different versions is easy to do, as as switching to custom built images, and also to mix the different versions of the different programs depending on your needs.
+SWIM uses the official distributed container images. This makes upgrading or downgrading to different versions is easy to do as well as changing the different versions for each of the services.
 
-The original Swarmprom used custom built container images that only supported AMD64 architecture and was locked to one specific version for all the programs used. SWIM makes it easier to deploy on ARM64 as well as AMD64 hardware. It should also be easier to deploy on new and less popular hardware, such as various ARM versions, RISC-V and other non-AMD64 architectures that are increasingly gaining a lot of popularity.
+SWIM supports ARM64/ARMv8 and AMD64 architecture. SWIM can be deployed on a Swarm network that consists of both AMD64 and ARM64 machines. The original Swarmprom used custom built container images that only supported AMD64 architecture and was locked to one specific version for all the programs used. SWIM makes it easier to deploy on ARM64 as well as AMD64 hardware. SWIM tries to make it easy to deploy on new and less popular hardware, such as various ARM versions, RISC-V and other non-AMD64/ARMv8 architectures that are increasingly gaining a lot of popularity.
 
-To deploy a different image than the default, you need to modify the compose file to use different container image(s). If the version of the software does not exist as an container image, or your hardware architecture is not supported, then you can in theory build them yourself from source since all the software used by SWIM is OSS with the Apache License, Version 2.0.
+To deploy a different image than the default, you need to modify the compose file to use different container image(s). If the version of the software does not exist as an container image, or your hardware architecture is not supported, then you can in theory build the container images yourself from source since, all the software used by SWIM is OSS licensed under the Apache License, Version 2.0.
 
 Please help improve SWIM by submitting PRs and/or add write suggestions on how to improve SWIM. For suggestions please use the GitHub discussion forum or create an GitHub issue.
-
-Have a good day or evening wherever you are.
 
 ## Prerequisites
 
 - Docker 20.10.17 or higher
   - Probably works with 17+ versions as well, but I have only tested on Docker 20.10 and higher
-- Docker Swarm cluster with one manager and 0 or more workers
-  - The swarm cluster must have 576 MB or more available memory that can be reserved by the SWIM services
-
+- A Docker Swarm cluster with one manager and 0 or more workers
+  - The swarm cluster must have at least 576 MB available memory that can be reserved by the SWIM services
+    - If the services reserve too much resources, you can change the numbers in the yaml file before deploying
 
 ## Deploy
 
-Here is the up to date [swarmprom-improved-compose.yaml](swarmprom-improved-compose.yaml) file. Modify it to your liking before deploying, or use it as is. To deploy run the below command:
+Default Deploy (without AlertManager and Karma):
 
 ```bash
 git clone https://github.com/persunde/swarmprom-improved.git
@@ -45,7 +43,13 @@ cd swarmprom-improved
 docker stack deploy -c swarmprom-improved-compose.yaml swim
 ```
 
-If you want AlertManager to send slack notifications, then deploy like this:
+### Deploy with Alertmanager and Karma
+
+If you want to include AlertManager and Karma, then:
+
+1. Modify the [swarmprom-improved-compose.yaml](swarmprom-improved-compose.yaml) file, and set the `replicas` to 1 for both AlertManager and Karma.
+2. Get a slack token/hook-URL.
+3. Deploy using the below command:
 
 ```bash
 $ git clone https://github.com/persunde/swarmprom-improved.git
@@ -58,13 +62,15 @@ docker stack deploy -c swarmprom-improved-compose.yaml swim
 
 See the original Swarmporm instructions for more detailed information about how to configure Alertmanager: <https://github.com/stefanprodan/swarmprom#instructions>
 
-### Verify that the deployment works
+### Verify that it works
 
-- Check that all the SWIM services are working by running: `docker stack ps swim`  
+- Check that all the SWIM services are working by running: `docker stack ps swim`
+  - Debug any of the failing services by running `docker stack ps <service-name> --no-trunc`
 - Access Grafana on from your browser on `http://<swarm-ip>:3000`
   - Check that you can see live data on the dashboards
+- Access Prometheus on from your browser on `http://<swarm-ip>:9090`
 
-### Services deployed with SWIM
+### Services
 
 - prometheus (metrics database) `http://<swarm-ip>:9090`
 - grafana (visualize metrics) `http://<swarm-ip>:3000`
@@ -88,19 +94,19 @@ These are the main changes from the original Swarmprom that are in SWarmprom IMp
   - ~~Unsee~~ replaced by [Karma](https://github.com/prymitive/karma)
 - Uses the official images from each project, to make it easier to change the versions of each program the user wants to use.
 - **ARM64 compatability**. 
-  - Tested on on AWS Graviton instances.
+  - Tested on on AWS Graviton3 instances (m7g)
   - All the images have ARM64/ARMv8 and AMD64 releases
-
-TODO:
 - Added the amazing Grafana dashboard [Node Exporter Full (1860)](https://grafana.com/grafana/dashboards/1860-node-exporter-full/)
-- Updated Grafana dashboards
-- Add a list of Grafana dashboards the user should add, either just add as a list or somehow embedded it into the yaml file or something
+- Updated and modified previous Grafana dashboards
+  - Please send PR with suggestions for new dashboards to add or changes to the current dashboards settings
 
 ## Persistence storage
 
 The `swarmprom-improved-compose.yaml` deployment will not keep the data between container restarts. To do that you need to handle it yourself.
 
-Assuming you run a multi-machine setup, the Grafana configuration and the Prometheus data needs to be saved in a persistent storage that is independent of the container, so that the data will be not be lost even when the machine or container restarts. You probably also want to save the Grafana configuration and dashboards.
+See the comments in the [swarmprom-improved-compose.yaml](swarmprom-improved-compose.yaml) file for how to add data persistence to Prometheus and Grafana.
+
+Assuming you run a multi-machine setup, the Grafana configuration and the Prometheus data needs to be saved in a persistent storage that is independent of the container, so that the data will be not be lost even when the machine or container restarts. You probably also want to save the Grafana configuration and dashboards between deployments or container restarts.
 
 Here are some suggestions on how to achieve persistent storage for Prometheus and Grafana:
 
