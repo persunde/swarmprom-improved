@@ -22,12 +22,14 @@ configs:
     file: ./alertmanager/alertmanager.yml
   grafana_data_sources_prometheus:
     file: ./grafana/prometheus.yaml
-  grafana_dashboard_nodes:
-    file: ./grafana/dashboards/swarmprom-nodes-dash.json
-  grafana_dashboard_prometheus:
-    file: ./grafana/dashboards/swarmprom-prometheus-dash.json
-  grafana_dashboard_services:
-    file: ./grafana/dashboards/swarmprom-services-dash.json
+  grafana_dashboard_node-exporter-full:
+    file: ./grafana/dashboards/node-exporter-full.json
+  grafana_dashboard_swarm-monitor:
+    file: ./grafana/dashboards/swarm-monitor.json
+  grafana_dashboard_swarmprom-nodes:
+    file: ./grafana/dashboards/swarmprom-nodes.json
+  grafana_dashboard_stacks-and-services:
+    file: ./grafana/dashboards/swarmprom-stacks-and-services.json
 
 services:
   dockerd-exporter:
@@ -76,12 +78,14 @@ services:
     configs:
       - source: grafana_data_sources_prometheus
         target: /etc/grafana/provisioning/datasources/prometheus.yaml
-      - source: grafana_dashboard_nodes
-        target: /etc/grafana/dashboards/swarmprom-nodes-dash.json
-      - source: grafana_dashboard_prometheus
-        target: /etc/grafana/dashboards/swarmprom-prometheus-dash.json
-      - source: grafana_dashboard_services
-        target: /etc/grafana/dashboards/swarmprom-services-dash.json
+      - source: grafana_dashboard_node-exporter-full
+        target: /etc/grafana/dashboards/node-exporter-full.json
+      - source: grafana_dashboard_swarm-monitor
+        target: /etc/grafana/dashboards/swarm-monitor.json
+      - source: grafana_dashboard_swarmprom-nodes
+        target: /etc/grafana/dashboards/swarmprom-nodes.json
+      - source: grafana_dashboard_stacks-and-services
+        target: /etc/grafana/dashboards/swarmprom-stacks-and-services.json
     environment:
       - GF_SECURITY_ADMIN_USER=${ADMIN_USER:-admin}
       - GF_SECURITY_ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
